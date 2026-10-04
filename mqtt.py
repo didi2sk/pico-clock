@@ -53,6 +53,7 @@ class MQTT:
             self.client.subscribe(topic + "/beep")
             self.client.subscribe(topic + "/backlight")
             self.client.subscribe(topic + "/alarm")
+            self.client.subscribe(topic + "/number")
             print("Subscribed to " + topic)
         except Exception as e:
             print(f"Error during MQTT connect: {e}")
@@ -105,24 +106,26 @@ class MQTT:
     def mqtt_callback(self, topic, msg):
         t = topic.decode()
         print(t)
-       
-        msg_str = msg.decode()
-        if msg_str == "beep":
-           self.speaker.beep(500)
-        else:   
+
+        msg_str = msg.decode().strip()
+        if t.endswith("/number"):
+            self.set_queue_number(msg_str)
+        elif msg_str == "beep":
+            self.speaker.beep(500)
+        else:
             try:
-                my_globals.mqtt_temp = float(msg_str)  # Ensure the value is correctly converted to a float     
+                my_globals.mqtt_temp = float(msg_str)  # Ensure the value is correctly converted to a float
             except ValueError:
                 print(f"Received invalid temperature value: {msg_str}")
-        
-        #self.speaker.beep(1000)
-        #self.send_event("info","OK")
-        #self.send_state()
-            
-#         for c in self.registered_callbacks:
-#             print(c)
-#             if t == c.topic:
-#                 c.callback(topic, msg)
+
+    def set_queue_number(self, text):
+        # empty text, "0" or anything that is not a positive integer clears the number
+        number = int(text) if text.isdigit() and int(text) > 0 else None
+        if number != my_globals.queue_number:
+            my_globals.queue_number = number
+            if number is not None:
+                my_globals.queue_number_new = True
+                self.speaker.beep(300)
 
     def send_event(self, topic: str, msg: str):
         #topic = mqtt_prefix + topic

@@ -212,6 +212,16 @@ class Display:
         #                        symbol, delay=0, clear=False)
         await self.show_text(temp + "°")
 
+    async def show_queue_number(self, number):
+        self.showing_time = False
+        self.hide_temperature_icon()
+        text = str(number)
+        if len(text) > 4:  # does not fit on the display, scroll it
+            await self.animate_text(text, force=True)
+        else:
+            width = len(text) * 5 - 1
+            await self.show_text(text, pos=(22 - width) // 2)
+
     async def show_message(self, text: str):
         self.showing_time = False
         if len(text) > 3:

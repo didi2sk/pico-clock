@@ -6,6 +6,10 @@ from buttons import Buttons
 from configuration import Configuration
 import helpers
 import my_globals
+import time
+
+NUMBER_SHOW_MS = 8000  # how long the queue number stays on the display
+NUMBER_REPEAT_SECOND = 40  # second of the minute when the number is shown again
 
 class Clock(App):
     def __init__(self, scheduler):
@@ -18,6 +22,7 @@ class Clock(App):
         self.hour = 0
         self.minute = 0
         self.second = 0
+        self.number_until = 0  # ticks_ms until which the queue number is shown (0 = not shown)
         scheduler.schedule(SCHEDULER_CLOCK_SECOND, 1000, self.secs_callback)
 
     async def enable(self):
@@ -52,7 +57,24 @@ class Clock(App):
     async def update_time(self):
         t = self.rtc.get_time()
         self.second = t[5]
-        
+
+        if my_globals.queue_number_new:
+            my_globals.queue_number_new = False
+            await self.show_number()
+            return
+        if self.number_until:
+            if time.ticks_diff(time.ticks_ms(), self.number_until) < 0:
+                return  # number is still being shown
+            self.number_until = 0
+            self.hour = t[3]
+            self.minute = t[4]
+            await self.show_time()
+            self.display.hide_temperature_icon()
+            return
+        if t[5] == NUMBER_REPEAT_SECOND and my_globals.queue_number is not None:
+            await self.show_number()
+            return
+
         if self.hour != t[3] or self.minute != t[4]:
             self.hour = t[3]
             self.minute = t[4]
@@ -61,7 +83,7 @@ class Clock(App):
             await self.show_time()
             self.display.hide_temperature_icon()
             
-        elif t[5] == 20 and self.config.show_temp:
+        elif t[5] == 20 and self.config.show_temp and my_globals.mqtt_temp > -90:
             await self.show_mqtt_temperature()
             self.display.show_temperature_icon()
             
@@ -69,11 +91,15 @@ class Clock(App):
             await self.show_time()
             self.display.hide_temperature_icon()
         
-        elif t[5] == 50 and self.config.show_temp:
+        elif t[5] == 50 and self.config.show_temp and my_globals.mqtt_temp > -90:
             await self.show_mqtt_temperature()
             self.display.show_temperature_icon()
 
             
+
+    async def show_number(self):
+        self.number_until = time.ticks_add(time.ticks_ms(), NUMBER_SHOW_MS) or 1
+        await self.display.show_queue_number(my_globals.queue_number)
 
     async def show_time(self):
         hour = self.hour
