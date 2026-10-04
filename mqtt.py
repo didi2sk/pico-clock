@@ -35,7 +35,7 @@ class MQTT:
             self.connect()
             scheduler.schedule(SCHEDULER_MQTT_HEARTBEAT, 250,
                                self.scheduler_heartbeat_callback)
-            scheduler.schedule(SCHEDULER_MQTT_CHECK, 1,
+            scheduler.schedule(SCHEDULER_MQTT_CHECK, 200,
                                self.scheduler_mqtt_callback)
             scheduler.schedule(SCHEDULER_MQTT_STATE, 60000,
                                self.scheduler_mqtt_state)
