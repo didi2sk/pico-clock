@@ -34,6 +34,10 @@ SCHEDULER_MQTT_HEARTBEAT = "mqtt-heartbeat"
 SCHEDULER_MQTT_CHECK = "mqtt-check"
 SCHEDULER_MQTT_STATE = "mqtt-state"
 
+SCHEDULER_WIFI_CHECK = "wifi-check"
+SCHEDULER_WATCHDOG = "watchdog"
+SCHEDULER_HOUSEKEEPING = "housekeeping"
+
 SCHEDULER_POMODORO_SECOND = "pomodoro-second"
 
 SCHEDULER_SPEAKER_BEEPS = "speaker-beeps"

@@ -14,10 +14,17 @@ import machine
 import uasyncio
 import _thread
 import my_globals
+import gc
+import watchdog
+from constants import SCHEDULER_WATCHDOG, SCHEDULER_HOUSEKEEPING
 #import network
 #import picoweb
 
 machine.freq(250_000_000)  # type: ignore
+
+# The hardware watchdog reboots the Pico when the program hangs. It cannot be stopped,
+# so while you edit/debug in Thonny leave this False (Ctrl+C would reboot the Pico after 8 s).
+ENABLE_WATCHDOG = False
 
 APP_CLASSES = [
     Clock,
@@ -58,11 +65,25 @@ for App in APP_CLASSES:
 #     yield from picoweb.start_response(resp)
 #     yield from resp.awrite(f"Current temperature: {temp}°C")
 
+async def feed_watchdog():
+    watchdog.feed()
+
+
+async def housekeeping():
+    gc.collect()
+
+
 async def start():
     print("STARTING...")
 
+    scheduler.schedule(SCHEDULER_HOUSEKEEPING, 60000, housekeeping)
+    if ENABLE_WATCHDOG:
+        scheduler.schedule(SCHEDULER_WATCHDOG, 1000, feed_watchdog)
+
     # start async scheduler
     scheduler.start()
+    if ENABLE_WATCHDOG:
+        watchdog.start()
 
     # create thread for UI updates.
     _thread.start_new_thread(display.enable_leds, ())

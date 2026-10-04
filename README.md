@@ -22,7 +22,7 @@ Základ je pôvodný kód zo zariadenia; zmeny proti nemu sú v druhom commite.
 2. Skopíruj `config.example.json` ako **`config.json`** a vyplň WiFi (`ssid`, `passphrase`),
    MQTT (`broker`, `prefix`) a časovú zónu `ntpPTZ`
    (Slovensko: `CET-1CEST,M3.5.0,M10.5.0/3`). `config.json` je v `.gitignore`, heslo sa nenahrá na GitHub.
-3. Na Pico nahraj všetky `*.py` zo zložky, `config.json` a `lib/umqtt/simple.py`
+3. Na Pico nahraj všetky `*.py` zo zložky (vrátane nového `watchdog.py`), `config.json` a `lib/umqtt/simple.py`
    (zložku `lib/umqtt` zachovaj). Súbory `test.py` a `testAD.py` netreba.
 4. Reštartuj Pico (alebo F5 na `main.py`). Výpisy sú v konzole Thonny.
 
@@ -49,9 +49,26 @@ Základ je pôvodný kód zo zariadenia; zmeny proti nemu sú v druhom commite.
 
 Test: `mosquitto_pub -h BROKER -t picoW001/number -m 42`
 
+## Stabilita
+
+- `scheduler.py`: chyba v úlohe sa vypíše a úloha beží ďalej (predtým sa ukončila navždy).
+- `wifi.py`: hodiny sa spustia aj bez WiFi (čas z DS3231); WiFi sa pripája znova každých 30 s
+  na pozadí a po pripojení sa znova nastaví čas z NTP.
+- `mqtt.py`: automatické opätovné pripojenie (pokus každých 10 s), unikátne client ID,
+  keepalive 120 s, ping každých 60 s.
+- `lib/umqtt/simple.py`: timeout 3 s pri pripájaní (nedostupný broker už nezablokuje hodiny).
+- `display.py`: vlákno displeja sa po chybe nezastaví.
+- `main.py`: `gc.collect()` každú minútu a voliteľný **watchdog**.
+
+**Watchdog** je predvolene vypnutý (`ENABLE_WATCHDOG = False` v `main.py`). Po zapnutí Pico samo
+reštartuje, ak sa program zasekne na viac ako 8 s. Zapni ho až keď je všetko odladené:
+watchdog sa nedá zastaviť, takže pri ladení v Thonny by Ctrl+C reštartoval Pico po 8 s.
+
 ## Zmeny oproti pôvodnému kódu
 
 - `mqtt.py`: odber `<prefix>/number`, spracovanie podľa topicu (predtým sa každá správa čítala ako teplota).
 - `clock.py`, `display.py`: zobrazenie čísla.
 - `clock.py`: teplota sa nezobrazí, kým neprišla prvá hodnota (predtým `-99.0`).
+- Opravy stability (sekcia vyššie): `scheduler.py`, `wifi.py`, `mqtt.py`, `display.py`, `main.py`, `watchdog.py`, `constants.py`, `lib/umqtt/simple.py`.
+- Kontrola MQTT správ každých 200 ms namiesto 1 ms, plynulá regulácia jasu.
 - WiFi heslá z `config.json`, `test.py` a `testAD.py` sú odstránené.

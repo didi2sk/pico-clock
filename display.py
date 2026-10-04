@@ -52,25 +52,31 @@ class Display:
 
     def enable_leds(self):
         while True:
-            self.row = (self.row + 1) % 8
-            led_row = self.leds[self.row]
-            for col in range(32):
-                self.clk.value(0)
-                self.sdi.value(led_row[col])
-                self.clk.value(1)
-            self.le.value(1)
-            self.le.value(0)
+            try:
+                self.row = (self.row + 1) % 8
+                led_row = self.leds[self.row]
+                for col in range(32):
+                    self.clk.value(0)
+                    self.sdi.value(led_row[col])
+                    self.clk.value(1)
+                self.le.value(1)
+                self.le.value(0)
 
-            self.a0.value(1 if self.row & 0x01 else 0)
-            self.a1.value(1 if self.row & 0x02 else 0)
-            self.a2.value(1 if self.row & 0x04 else 0)
+                self.a0.value(1 if self.row & 0x01 else 0)
+                self.a1.value(1 if self.row & 0x02 else 0)
+                self.a2.value(1 if self.row & 0x04 else 0)
 
-            self.oe.value(0)
-            if self.auto_backlight:
-                sleep_us(self.auto_sleep)
-            else:
-                sleep_us(self.backlight_sleep[self.current_backlight])
-            self.oe.value(1)
+                self.oe.value(0)
+                if self.auto_backlight:
+                    sleep_us(self.auto_sleep)
+                else:
+                    sleep_us(self.backlight_sleep[self.current_backlight])
+                self.oe.value(1)
+            except Exception as e:
+                # the leds list can be swapped by the main thread; never let this thread die
+                self.oe.value(1)
+                print("Display thread error:", e)
+                sleep_us(10000)
 
     async def animate_text(self, text: str, delay=1000, clear=True, force=False):
         if self.animating and not force:

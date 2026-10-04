@@ -1,11 +1,19 @@
 import time
 import json
+import machine
+import network
+from ubinascii import hexlify
 from configuration import Configuration
 from constants import SCHEDULER_MQTT_CHECK, SCHEDULER_MQTT_HEARTBEAT, SCHEDULER_MQTT_STATE
 from scheduler import Scheduler
 from util import singleton
 import my_globals
 from speaker import Speaker
+
+KEEPALIVE_S = 120
+PING_EVERY_MS = 60000
+RECONNECT_EVERY_MS = 10000
+
 
 @singleton
 class MQTT:
@@ -28,10 +36,14 @@ class MQTT:
         self.state_callbacks = []
         self.configuration = Configuration().mqtt_config
         self.speaker = Speaker(scheduler)
+        self.connected = False
+        self.last_attempt = time.ticks_ms()
         if self.configuration.enabled:
             from umqtt.simple import MQTTClient
-            self.client = MQTTClient(self.configuration.prefix, self.configuration.broker, user=None,
-                                     password=None, keepalive=300, ssl=False, ssl_params={})
+            # unique client id: the broker drops an older connection with the same id
+            client_id = self.configuration.prefix + "-" + hexlify(machine.unique_id()).decode()
+            self.client = MQTTClient(client_id, self.configuration.broker, user=None,
+                                     password=None, keepalive=KEEPALIVE_S, ssl=False, ssl_params={})
             self.connect()
             scheduler.schedule(SCHEDULER_MQTT_HEARTBEAT, 250,
                                self.scheduler_heartbeat_callback)
@@ -55,8 +67,26 @@ class MQTT:
             self.client.subscribe(topic + "/alarm")
             self.client.subscribe(topic + "/number")
             print("Subscribed to " + topic)
+            self.connected = True
         except Exception as e:
             print(f"Error during MQTT connect: {e}")
+            self.disconnected()
+
+    def disconnected(self):
+        self.connected = False
+        self.last_attempt = time.ticks_ms()
+        try:
+            self.client.sock.close()
+        except Exception:
+            pass
+
+    def reconnect(self):
+        if not network.WLAN(network.STA_IF).isconnected():
+            return
+        if time.ticks_diff(time.ticks_ms(), self.last_attempt) < RECONNECT_EVERY_MS:
+            return
+        print("Reconnecting to MQTT")
+        self.connect()
             
 #     def connect(self):
 #         try:
@@ -86,22 +116,38 @@ class MQTT:
         if first:
             self.client.ping()
             self.lastping = time.ticks_ms()
-        if time.ticks_diff(time.ticks_ms(), self.lastping) >= 300000:
+        if time.ticks_diff(time.ticks_ms(), self.lastping) >= PING_EVERY_MS:
             self.client.ping()
             self.lastping = time.ticks_ms()
         return
 
     async def scheduler_heartbeat_callback(self):
-        self.heartbeat(False)
+        if not self.connected:
+            return
+        try:
+            self.heartbeat(False)
+        except Exception as e:
+            print(f"MQTT ping failed: {e}")
+            self.disconnected()
 
     async def scheduler_mqtt_callback(self):
+        if not self.connected:
+            self.reconnect()
+            return
         try:
             self.client.check_msg()
         except Exception as e:
-            print(f"Error during MQTT connect: {e}")
+            print(f"MQTT connection lost: {e}")
+            self.disconnected()
 
     async def scheduler_mqtt_state(self):
-        self.send_state()
+        if not self.connected:
+            return
+        try:
+            self.send_state()
+        except Exception as e:
+            print(f"MQTT publish failed: {e}")
+            self.disconnected()
 
     def mqtt_callback(self, topic, msg):
         t = topic.decode()

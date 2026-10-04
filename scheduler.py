@@ -27,7 +27,11 @@ class Scheduler:
         while True:
             if task.cancelled:
                 break
-            await task.callback()
+            try:
+                await task.callback()
+            except Exception as e:
+                # keep the task alive, otherwise one error stops it forever
+                print("Scheduler task", task.name, "error:", e)
             await uasyncio.sleep_ms(task.duration)
 
     def schedule(self, name, duration, callback, initial_delay=0):
