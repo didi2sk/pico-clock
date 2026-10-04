@@ -1,0 +1,23 @@
+{
+  "runConfig": {
+    "temp": "c",
+    "autolight": false,
+    "clockType": "24",
+    "showTemp": true,
+    "blinkTimeColon": false
+  },
+  "wifiConfig": {
+    "ntpEnabled": true,
+    "ntpPTZ": "CET-1CEST,M3.5.0,M10.5.0/3",
+    "enabled": true,
+    "ssid": "YOUR_WIFI_SSID",
+    "hostname": "pico-clock-green",
+    "passphrase": "YOUR_WIFI_PASSWORD"
+  },
+  "mqttConfig": {
+    "enabled": true,
+    "prefix": "picoW001",
+    "broker": "192.168.1.10",
+    "topic": "clock"
+  }
+}
