@@ -8,6 +8,15 @@ from configuration import Configuration
 import helpers
 
 
+# Auto brightness calibration (raw ADC u16). A HIGHER raw value means a DARKER room.
+# Check the printed "light raw" values in the dark and in bright light and adjust.
+LIGHT_DARK_RAW = 12900    # raw value in a dark room  -> dimmest display
+LIGHT_BRIGHT_RAW = 12400  # raw value in bright light -> brightest display
+AUTO_SLEEP_MIN = 10       # LED on-time (us) when dark
+AUTO_SLEEP_MAX = 400      # LED on-time (us) when bright
+LIGHT_FILTER = 0.2        # 0..1, lower = slower and smoother
+
+
 @singleton
 class Display:
     class WaitForAnimation:
@@ -57,7 +66,10 @@ class Display:
             self.a2.value(1 if self.row & 0x04 else 0)
 
             self.oe.value(0)
-            sleep_us(self.backlight_sleep[self.current_backlight])
+            if self.auto_backlight:
+                sleep_us(self.auto_sleep)
+            else:
+                sleep_us(self.backlight_sleep[self.current_backlight])
             self.oe.value(1)
 
     async def animate_text(self, text: str, delay=1000, clear=True, force=False):
@@ -284,6 +296,7 @@ class Display:
         elif self.current_backlight == len(self.backlight_sleep)-1:
             self.show_icon("AutoLight")
             self.auto_backlight = True
+            self.light_filtered = None
             self.update_auto_backlight_value()
             self.scheduler.schedule(
                 SCHEDULER_UPDATE_BACKLIGHT_VALUE, 1000, self.update_backlight_callback)
@@ -299,38 +312,35 @@ class Display:
         self.backlight_sleep = [10, 100, 300, 400, 700, 1250, 2000]
         self.current_backlight = 6
         self.auto_backlight = self.config.autolight
-        self.update_auto_backlight_value()
-        self.last_backlight_update = time.ticks_ms()
+        self.auto_sleep = AUTO_SLEEP_MAX
+        self.light_filtered = None
 
         if self.auto_backlight:
+            self.update_auto_backlight_value()
             self.show_icon("AutoLight")
             self.scheduler.schedule(
                 SCHEDULER_UPDATE_BACKLIGHT_VALUE, 1000, self.update_backlight_callback)
 
+    def read_light(self):
+        # average of several samples to reduce ADC noise
+        return sum(self.ain.read_u16() for _ in range(16)) / 16
+
     def update_auto_backlight_value(self):
-        backlight = 0
-        aim = self.ain.read_u16()
-      
-        if aim > 12900:  # Low light
-            backlight = 0
-        elif aim > 12750:
-            backlight = 1
-        elif aim > 12500:
-            backlight = 2
+        raw = self.read_light()
+        if self.light_filtered is None:
+            self.light_filtered = raw
         else:
-            backlight = 3
-        
-        #print(f"Auto light value is {aim} and backlight id {backlight}")
-          
-        if backlight != self.current_backlight:
-            self.current_backlight = backlight
-            self.last_backlight_update = time.ticks_ms()
+            self.light_filtered += (raw - self.light_filtered) * LIGHT_FILTER
+
+        # 0.0 = dark, 1.0 = bright
+        x = (LIGHT_DARK_RAW - self.light_filtered) / (LIGHT_DARK_RAW - LIGHT_BRIGHT_RAW)
+        x = min(1.0, max(0.0, x))
+        # logarithmic mapping: the eye sees brightness steps logarithmically
+        self.auto_sleep = int(AUTO_SLEEP_MIN * (AUTO_SLEEP_MAX / AUTO_SLEEP_MIN) ** x)
+        print(f"light raw {raw:.0f} filtered {self.light_filtered:.0f} -> {self.auto_sleep} us")
 
     async def update_backlight_callback(self):
-        tm = time.ticks_ms()
-        difference = time.ticks_diff(tm, self.last_backlight_update)
-        if difference > 3000:
-            self.update_auto_backlight_value()
+        self.update_auto_backlight_value()
 
     def show_temperature_icon(self):
         if self.config.temp == "c":
